@@ -6,7 +6,7 @@ const redisConnection = {
   url: env.REDIS_URL,
 };
 
-const scanWorker = new Worker("scan", scan, {
+const scanWorker = new Worker(env.SCAN_QUEUE_NAME, scan, {
   connection: redisConnection,
   autorun: false,
 });
