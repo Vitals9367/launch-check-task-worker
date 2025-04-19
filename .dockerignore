@@ -1,0 +1,35 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+build
+.next
+out
+
+# Development
+.git
+.gitignore
+.env*
+.vscode
+.idea
+*.log
+
+# Docker
+Dockerfile
+Dockerfile.dev
+docker-compose.yml
+.dockerignore
+
+# Testing
+coverage
+*.test.ts
+*.test.tsx
+__tests__
+__mocks__
+
+# Misc
+README.md
+*.md
+.DS_Store 

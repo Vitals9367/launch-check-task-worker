@@ -1,26 +1,58 @@
-# Build stage for Go tools
-FROM golang:1.22-alpine AS go-builder
+FROM golang:1.24
 
-# Install build dependencies
-RUN apk add --no-cache git
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    unzip \
+    nodejs \
+    npm \
+    chromium \
+    chromium-driver \
+    fonts-freefont-ttf \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Nuclei
-RUN go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+# Set Chrome flags for running in container
+ENV CHROME_BIN=/usr/bin/chromium \
+    CHROME_PATH=/usr/lib/chromium/ \
+    CHROMIUM_FLAGS="--no-sandbox --headless --disable-gpu --disable-dev-shm-usage"
 
-# Final stage
-FROM node:22-alpine
+# Download and install binaries
+RUN curl -sSfL https://github.com/projectdiscovery/nuclei/releases/download/v3.4.2/nuclei_3.4.2_linux_amd64.zip -o nuclei.zip && \
+    unzip nuclei.zip -d /tmp && \
+    mv /tmp/nuclei /usr/local/bin/ && \
+    chmod +x /usr/local/bin/nuclei && \
+    rm -rf nuclei.zip /tmp/* && \
+    \
+    curl -sSfL https://github.com/projectdiscovery/httpx/releases/download/v1.6.10/httpx_1.6.10_linux_amd64.zip -o httpx.zip && \
+    unzip httpx.zip -d /tmp && \
+    mv /tmp/httpx /usr/local/bin/ && \
+    chmod +x /usr/local/bin/httpx && \
+    rm -rf httpx.zip /tmp/* && \
+    \
+    curl -sSfL https://github.com/projectdiscovery/katana/releases/download/v1.1.2/katana_1.1.2_linux_amd64.zip -o katana.zip && \
+    unzip katana.zip -d /tmp && \
+    mv /tmp/katana /usr/local/bin/ && \
+    chmod +x /usr/local/bin/katana && \
+    rm -rf katana.zip /tmp/*
+
+# Update Nuclei templates
+RUN nuclei -update-templates
 
 # Install pnpm
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+RUN npm install -g pnpm
 
-# Copy Nuclei from Go build stage
-COPY --from=go-builder /go/bin/nuclei /usr/local/bin/
-
-# Create app directory and set permissions
+# Create app directory and set up non-root user
 WORKDIR /app
-RUN chown -R node:node /app
+RUN useradd -m node && \
+    mkdir -p /home/node/.config/katana && \
+    mkdir -p /home/node/.cache && \
+    chown -R node:node /app /home/node
+
+# Copy Katana configuration
+COPY --chown=node:node config/katana.yaml /home/node/.config/katana/config.yaml
 
 # Switch to non-root user
 USER node

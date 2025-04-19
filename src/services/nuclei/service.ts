@@ -1,11 +1,13 @@
-import which from "which";
-import { exec } from "child_process";
-import { promisify } from "util";
 import { NucleiError } from "./exceptions";
-import { NucleiOptions, ScanResult, Finding, ScanStatus } from "./types";
+import {
+  NucleiOptions,
+  ScanResult,
+  SCAN_STATUS,
+  NucleiFindingSchema,
+  NucleiFinding,
+} from "./types";
 import { logger } from "@/logger";
-
-const execAsync = promisify(exec);
+import { CliService } from "@/services/cli-service";
 
 /**
  * Default configuration values for Nuclei scans
@@ -19,48 +21,11 @@ const DEFAULT_CONFIG = {
  * Service for running security scans using Nuclei
  * @see https://github.com/projectdiscovery/nuclei
  */
-export class NucleiService {
-  private nucleiPath: string = "";
-  private isInitialized = false;
+export class NucleiService extends CliService {
+  protected binaryName = "nuclei";
 
-  /**
-   * Initializes the Nuclei service by locating the nuclei binary
-   * @throws {NucleiError} If nuclei binary is not found in system PATH
-   */
-  private async initialize(): Promise<void> {
-    if (this.isInitialized) return;
-
-    try {
-      this.nucleiPath = await which("nuclei");
-      if (!this.nucleiPath) {
-        throw new NucleiError("Nuclei binary not found in system PATH");
-      }
-      this.isInitialized = true;
-      logger.info("Nuclei binary initialized", { path: this.nucleiPath });
-    } catch (error) {
-      throw new NucleiError("Nuclei binary not found in system PATH");
-    }
-  }
-
-  /**
-   * Executes a command and returns its output
-   * @param command - Array of command parts to execute
-   * @returns Promise containing stdout and stderr
-   * @throws {NucleiError} If command execution fails
-   */
-  private async runCommand(
-    command: string[]
-  ): Promise<{ stdout: string; stderr: string }> {
-    try {
-      const { stdout, stderr } = await execAsync(command.join(" "));
-      return { stdout, stderr };
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      throw new NucleiError(
-        `Failed to execute Nuclei command: ${errorMessage}`
-      );
-    }
+  protected createError(message: string): Error {
+    return new NucleiError(message);
   }
 
   /**
@@ -69,7 +34,7 @@ export class NucleiService {
    * @param options - Scan configuration options
    * @returns Array of command arguments
    */
-  private buildCommand(targets: string[], options: NucleiOptions): string[] {
+  protected buildCommand(targets: string[], options: NucleiOptions): string[] {
     const {
       severity,
       templates,
@@ -79,17 +44,11 @@ export class NucleiService {
     } = options;
 
     const command = [
-      this.nucleiPath,
+      this.binaryPath,
       "-target",
       targets.join(","),
       "-j",
-      "-rate-limit",
-      rateLimit.toString(),
-      "-timeout",
-      timeout.toString(),
-      "-fhr",
-      "-uc",
-      "-headless",
+      "-silent",
     ];
 
     if (severity?.length) {
@@ -108,52 +67,38 @@ export class NucleiService {
   }
 
   /**
-   * Validates scan targets
-   * @param targets - List of URLs to scan
-   * @throws {NucleiError} If targets are invalid
-   */
-  private validateTargets(targets: string[]): void {
-    if (!targets.length) {
-      throw new NucleiError("No targets provided for scanning");
-    }
-
-    if (
-      !targets.every(
-        (url) => url.startsWith("http://") || url.startsWith("https://")
-      )
-    ) {
-      throw new NucleiError("All targets must start with http:// or https://");
-    }
-  }
-
-  /**
    * Parses and processes the scan results
    * @param stdout - Command standard output
    * @param stderr - Command standard error
    * @param targets - List of scanned URLs
    * @returns Processed scan results
    */
-  private parseResults(
+  protected parseResults(
     stdout: string,
     stderr: string,
     targets: string[]
   ): ScanResult {
-    const results: Finding[] = stdout
+    // Log raw output for debugging
+    logger.debug("Raw stdout", { stdout: stdout.slice(0, 1000) }); // First 1000 chars
+    if (stderr) {
+      logger.debug("Raw stderr", { stderr });
+    }
+
+    const findings = stdout
       .split("\n")
       .filter((line) => line.trim())
       .map((line) => {
         try {
-          const result = JSON.parse(line);
-          // Validate required fields
-          if (
-            !result?.info?.title ||
-            !result?.info?.description ||
-            !result?.info?.severity
-          ) {
-            logger.warn("Invalid finding format", { line });
+          const result = NucleiFindingSchema.safeParse(JSON.parse(line));
+
+          if (!result.success) {
+            logger.warn("Invalid finding format", {
+              line,
+              errors: result.error.errors,
+            });
             return null;
           }
-          return result;
+          return result.data;
         } catch (error) {
           logger.warn("Failed to parse Nuclei output line", {
             line,
@@ -162,14 +107,14 @@ export class NucleiService {
           return null;
         }
       })
-      .filter((result): result is Finding => result !== null);
+      .filter((result): result is NucleiFinding => result !== null);
 
     const scanResults: ScanResult = {
       timestamp: new Date().toISOString(),
       target: targets[0] ?? "",
-      status: ScanStatus.Completed,
-      total_findings: results.length,
-      findings: results,
+      status: SCAN_STATUS.Completed,
+      total_findings: findings.length,
+      findings,
     };
 
     if (stderr) {
@@ -221,7 +166,7 @@ export class NucleiService {
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
-      throw new NucleiError(`Scan failed: ${errorMessage}`);
+      throw this.createError(`Scan failed: ${errorMessage}`);
     }
   }
 }
