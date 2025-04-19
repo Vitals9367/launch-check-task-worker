@@ -7,11 +7,30 @@ const redisConnection = {
   url: env.REDIS_URL,
 };
 
+// Configure worker for long-running security scans
 const scanWorker = new Worker(env.SCAN_QUEUE_NAME, scan, {
   connection: redisConnection,
   autorun: false,
+  // Reduce concurrency to prevent resource exhaustion
   concurrency: 10,
-  skipStalledCheck: true,
+  // Increase timeout for long-running scans (30 minutes)
+  lockDuration: 1800000,
+  // Automatically extend lock while job is active
+  lockRenewTime: 15000,
+  // Don't process stalled jobs immediately
+  stalledInterval: 30000,
+  // Maximum number of stalled job checks
+  maxStalledCount: 3,
+  // Remove completed jobs after 1 hour
+  removeOnComplete: {
+    age: 3600,
+    count: 1000,
+  },
+  // Keep failed jobs for 24 hours
+  removeOnFail: {
+    age: 86400,
+    count: 1000,
+  },
 });
 
 scanWorker.on("active", (job) => {
@@ -46,9 +65,15 @@ scanWorker.on("error", (error) => {
   });
 });
 
+// Start the worker
+scanWorker.run();
+
 logger.info("Starting scan worker", {
   queue: env.SCAN_QUEUE_NAME,
   redis: env.REDIS_URL,
+  settings: {
+    concurrency: 2,
+    lockDuration: "30 minutes",
+    lockRenewTime: "15 seconds",
+  },
 });
-
-scanWorker.run();
