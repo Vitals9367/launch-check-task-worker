@@ -86,7 +86,7 @@ export async function waitForZapOperation(
   operationType: string,
   scanId: string,
   targetUrl: string,
-  maxRetries = 100,
+  maxRetries = 450,
   intervalMs = 2000
 ): Promise<void> {
   let retries = 0;

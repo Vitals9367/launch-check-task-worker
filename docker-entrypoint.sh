@@ -21,12 +21,13 @@ zap -daemon \
   -config api.addrs.addr.name=.* \
   -config api.addrs.addr.regex=true \
   -config api.disablekey=true \
-  -config connection.timeoutInSecs=120 \
+  -config connection.timeoutInSecs=300 \
   -config database.recoverylog=false \
   -config scanner.threadPerHost=${ZAP_SCAN_THREADS} \
   -config scanner.delayInMs=${ZAP_SCAN_DELAY} \
   -config spider.thread=${ZAP_MAX_THREADS} \
   -config ajaxSpider.maxDuration=5 \
+  -config ascan.maxScanDurationInMins=30 \
   ${JAVA_OPTS} &
 ZAP_PID=$!
 
