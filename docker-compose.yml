@@ -1,0 +1,21 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - nuclei-templates:/root/.nuclei-templates
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      - PNPM_HOME=/pnpm
+      - PATH=/pnpm:$PATH
+    command: pnpm dev
+
+volumes:
+  nuclei-templates:

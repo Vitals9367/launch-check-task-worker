@@ -8,7 +8,6 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { ScanFinding } from "./scan-finding";
-// import { projects } from "./projects";
 
 // Scan status enum
 export const scanStatusEnum = pgEnum("scan_status", [
@@ -50,9 +49,7 @@ export const scans = pgTable("scans", {
   warnings: text(),
 
   // Relathionships
-  // projectId: uuid()
-  //   .references(() => projects.id, { onDelete: "cascade" })
-  //   .notNull(),
+  projectId: uuid().notNull(),
 });
 
 // Types
