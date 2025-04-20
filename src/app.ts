@@ -5,6 +5,7 @@ import { logger } from "./logger";
 
 const redisConnection = {
   url: env.REDIS_URL,
+  tls: {},
 };
 
 // Configure worker for long-running security scans
